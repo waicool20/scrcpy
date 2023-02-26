@@ -148,7 +148,12 @@ public class ScreenEncoder implements Device.RotationListener {
                 try (FileInputStream fis = new FileInputStream(fd)) {
                     while (!consumeRotationChange()) {
                         if (fis.read() == 1) {
-                            Bitmap bmp = SurfaceControl.screenshot(new Rect(), videoRect.width(), videoRect.height(), 0);
+                            Bitmap bmp;
+                            if (screenInfo.getDeviceRotation() % 2 == 0) {
+                                bmp = SurfaceControl.screenshot(new Rect(), videoRect.width(), videoRect.height(), 0);
+                            } else {
+                                bmp = SurfaceControl.screenshot(new Rect(), videoRect.height(), videoRect.width(), 0);
+                            }
                             byteBuffer.rewind();
                             if (bmp.getConfig() == Bitmap.Config.ARGB_8888) {
                                 bmp.copyPixelsToBuffer(byteBuffer);
