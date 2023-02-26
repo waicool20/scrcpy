@@ -1,7 +1,6 @@
 package com.genymobile.scrcpy;
 
-import com.genymobile.scrcpy.wrappers.SurfaceControl;
-
+import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
@@ -11,9 +10,13 @@ import android.os.Build;
 import android.os.IBinder;
 import android.view.Surface;
 
+import com.genymobile.scrcpy.wrappers.SurfaceControl;
+
 import java.io.FileDescriptor;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -45,7 +48,7 @@ public class ScreenEncoder implements Device.RotationListener {
     private boolean firstFrameSent;
 
     public ScreenEncoder(boolean sendFrameMeta, int bitRate, int maxFps, List<CodecOption> codecOptions, String encoderName,
-            boolean downsizeOnError) {
+                         boolean downsizeOnError) {
         this.sendFrameMeta = sendFrameMeta;
         this.bitRate = bitRate;
         this.maxFps = maxFps;
@@ -71,7 +74,7 @@ public class ScreenEncoder implements Device.RotationListener {
             Workarounds.fillAppInfo();
         }
 
-        internalStreamScreen(device, fd);
+        screenshotListener(device, fd);
     }
 
     private void internalStreamScreen(Device device, FileDescriptor fd) throws IOException {
@@ -127,6 +130,41 @@ public class ScreenEncoder implements Device.RotationListener {
                     }
                 }
             } while (alive);
+        } finally {
+            device.setRotationListener(null);
+        }
+    }
+
+    private void screenshotListener(Device device, FileDescriptor fd) {
+        device.setRotationListener(this);
+        try {
+            while (true) {
+                IBinder display = createDisplay();
+                ScreenInfo screenInfo = device.getScreenInfo();
+                Rect videoRect = screenInfo.getVideoSize().toRect();
+                ByteBuffer byteBuffer = ByteBuffer.allocate(videoRect.width() * videoRect.height() * 4);
+                byteBuffer.order(ByteOrder.LITTLE_ENDIAN);
+
+                try (FileInputStream fis = new FileInputStream(fd)) {
+                    while (!consumeRotationChange()) {
+                        if (fis.read() == 1) {
+                            Bitmap bmp = SurfaceControl.screenshot(new Rect(), videoRect.width(), videoRect.height(), 0);
+                            byteBuffer.rewind();
+                            Bitmap tmp = bmp.copy(Bitmap.Config.ARGB_8888, true);
+                            tmp.copyPixelsToBuffer(byteBuffer);
+                            tmp.recycle();
+                            bmp.recycle();
+                            byteBuffer.rewind();
+                            IO.writeFully(fd, byteBuffer);
+                        }
+                    }
+                } catch (Exception e) {
+                    Ln.e("Something happened while taking screenshots", e);
+                    break;
+                } finally {
+                    destroyDisplay(display);
+                }
+            }
         } finally {
             device.setRotationListener(null);
         }

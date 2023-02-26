@@ -3,9 +3,11 @@ package com.genymobile.scrcpy.wrappers;
 import com.genymobile.scrcpy.Ln;
 
 import android.annotation.SuppressLint;
+import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 import android.view.Surface;
 
 import java.lang.reflect.InvocationTargetException;
@@ -135,6 +137,26 @@ public final class SurfaceControl {
     public static void destroyDisplay(IBinder displayToken) {
         try {
             CLASS.getMethod("destroyDisplay", IBinder.class).invoke(null, displayToken);
+        } catch (Exception e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private static Method screenshotMethod;
+
+    public static Bitmap screenshot(Rect rect, int width, int height, int rotation) {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                if (screenshotMethod == null) {
+                    screenshotMethod = CLASS.getMethod("screenshot", Rect.class, int.class, int.class, int.class);
+                }
+                return (Bitmap) screenshotMethod.invoke(null, rect, width, height, rotation);
+            } else {
+                if (screenshotMethod == null) {
+                    screenshotMethod = CLASS.getMethod("screenshot", int.class, int.class);
+                }
+                return (Bitmap) screenshotMethod.invoke(null, width, height);
+            }
         } catch (Exception e) {
             throw new AssertionError(e);
         }
